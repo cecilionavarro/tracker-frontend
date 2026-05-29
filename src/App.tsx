@@ -1,20 +1,15 @@
-import { useQuery } from "@tanstack/react-query"
-import axios from 'axios'
+import { Route, Routes } from "react-router-dom";
+import Home from "./pages/Home";
+import { Layout } from "./components/layout";
 export const SESSIONS = "session";
 
-const getSessions = async () => {
-  const response = await axios('http://localhost:4004/api/v1/sessions?page=1&page_size=4')
-  return response.data
-}
-
 const App = () => {
-  const { data } = useQuery({
-    queryKey: [SESSIONS],
-    queryFn: getSessions
-  })
-
   return (
-    <div>{JSON.stringify(data)}</div>
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Home />}></Route>
+      </Routes>
+    </Layout>
   )
 }
 
