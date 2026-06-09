@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { SESSIONS } from "@/queryOptions/sessionsQueryOptions";
+import { OVERVIEW } from "@/queryOptions/overviewQueryOptions";
 import { API_BASE_URL } from "@/config/apiClient";
 import type { Session } from "@/lib/api";
 import { getActiveDurationSeconds } from "@/lib/time";
@@ -59,6 +60,7 @@ export function useDashboardWebSocket() {
 
       // Always refetch to stay in sync with backend
       queryClient.refetchQueries({ queryKey: [SESSIONS] });
+      queryClient.refetchQueries({ queryKey: [OVERVIEW] });
     };
 
     return () => {
