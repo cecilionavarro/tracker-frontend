@@ -1,10 +1,12 @@
-import SessionsTable from "../features/sessions/page"
+
+import SessionsTable from "@/features/sessions/page"
 
 
 const Home = () => {
-  
   return (
-    <SessionsTable />
+    <div className="container mx-auto py-4">
+      <SessionsTable />
+    </div>
   )
 }
 

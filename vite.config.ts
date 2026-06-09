@@ -6,9 +6,26 @@ import { defineConfig } from "vite"
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  optimizeDeps: {
+    exclude: ["recharts"],
+  },
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
+    alias: [
+      {
+        find: /^use-sync-external-store\/shim\/with-selector(\.js)?$/,
+        replacement: path.resolve(
+          __dirname,
+          "./src/lib/use-sync-external-store-with-selector.ts"
+        ),
+      },
+      {
+        find: /^es-toolkit\/compat\/(.+)$/,
+        replacement: path.resolve(__dirname, "./src/lib/es-toolkit-compat/$1.ts"),
+      },
+      {
+        find: "@",
+        replacement: path.resolve(__dirname, "./src"),
+      },
+    ],
   },
 })

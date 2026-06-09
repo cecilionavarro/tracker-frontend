@@ -7,6 +7,13 @@ import { getActiveDurationSeconds } from "@/lib/time";
 
 const WS_PATH = "/api/v1/ws/dashboard/";
 
+type DashboardSocketPayload = {
+  type?: string;
+  data?: {
+    clocked_in?: boolean;
+  };
+};
+
 export function useDashboardWebSocket() {
   const queryClient = useQueryClient();
 
@@ -15,7 +22,7 @@ export function useDashboardWebSocket() {
     const socket = new WebSocket(wsUrl);
 
     socket.onmessage = (event) => {
-      let payload: any = null;
+      let payload: DashboardSocketPayload | null = null;
       try {
         payload = JSON.parse(event.data);
       } catch {

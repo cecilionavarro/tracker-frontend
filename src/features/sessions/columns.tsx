@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
   IconDotsVertical,
 } from "@tabler/icons-react"
