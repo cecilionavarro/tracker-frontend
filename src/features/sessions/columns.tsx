@@ -3,14 +3,51 @@ import {
   IconDotsVertical,
 } from "@tabler/icons-react"
 import { useMemo } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { Session } from "../../lib/api";
+import { deleteSession, type Session } from "../../lib/api";
 import { formatDurationSeconds, formatSessionTime } from "@/lib/format";
 import { useNow } from "@/hooks/useNow";
 import { getActiveDurationSeconds } from "@/lib/time";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { SESSIONS } from "@/queryOptions/sessionsQueryOptions";
+import { OVERVIEW } from "@/queryOptions/overviewQueryOptions";
+import { DASHBOARD_ACTIVITY } from "@/queryOptions/dashboardActivityQueryOptions";
+
+const CATEGORY_DOT_COLORS: Record<string, string> = {
+  creating: "#eab308",
+  toycon: "#22c55e",
+};
+
+function getCategoryDotColor(session: Session) {
+  const category = session.category;
+  if (!category) return "#999999";
+
+  const categoryLabel = category.label.trim().toLowerCase();
+  const tags = session.tags.trim().toLowerCase();
+
+  if (categoryLabel === "pianiso") {
+    if (
+      tags.includes("non_technical") ||
+      tags.includes("non technical") ||
+      tags.includes("non-technical")
+    ) {
+      return "#f97316";
+    }
+
+    if (tags.includes("technical")) {
+      return "#ef4444";
+    }
+  }
+
+  return (
+    CATEGORY_DOT_COLORS[categoryLabel] ??
+    category.color ??
+    "#999999"
+  );
+}
 
 function DurationCell({
   row,
@@ -31,6 +68,52 @@ function DurationCell({
     <span className="inline-block min-w-[5.5rem] tabular-nums">
       {formatDurationSeconds(totalSeconds)}
     </span>
+  );
+}
+
+function SessionActionsCell({ session }: { session: Session }) {
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteSession(session.id),
+    onSuccess: () => {
+      queryClient.setQueryData<Session[]>([SESSIONS], (old) => {
+        return old?.filter((item) => item.id !== session.id);
+      });
+
+      queryClient.invalidateQueries({ queryKey: [SESSIONS] });
+      queryClient.invalidateQueries({ queryKey: [OVERVIEW] });
+      queryClient.invalidateQueries({ queryKey: [DASHBOARD_ACTIVITY] });
+    },
+  });
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className="flex size-8 text-muted-foreground data-[state=open]:bg-muted"
+          size="icon"
+          disabled={deleteMutation.isPending}
+        >
+          <IconDotsVertical />
+          <span className="sr-only">Open menu</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-32">
+        <DropdownMenuItem>Edit</DropdownMenuItem>
+        <DropdownMenuItem>Make a copy</DropdownMenuItem>
+        <DropdownMenuItem>Favorite</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          variant="destructive"
+          disabled={deleteMutation.isPending}
+          onSelect={() => deleteMutation.mutate()}
+        >
+          {deleteMutation.isPending ? "Deleting..." : "Delete"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -88,7 +171,7 @@ export const columns: ColumnDef<Session>[] = [
         <span className="inline-flex items-center gap-2">
           <span
             className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: category.color ?? "#999999" }}
+            style={{ backgroundColor: getCategoryDotColor(row.original) }}
           />
           <span>{category.label}</span>
         </span>
@@ -106,26 +189,6 @@ export const columns: ColumnDef<Session>[] = [
   },
   {
     id: "actions",
-    cell: () => (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            className="flex size-8 text-muted-foreground data-[state=open]:bg-muted"
-            size="icon"
-          >
-            <IconDotsVertical />
-            <span className="sr-only">Open menu</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-32">
-          <DropdownMenuItem>Edit</DropdownMenuItem>
-          <DropdownMenuItem>Make a copy</DropdownMenuItem>
-          <DropdownMenuItem>Favorite</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    ),
+    cell: ({ row }) => <SessionActionsCell session={row.original} />,
   },
 ];

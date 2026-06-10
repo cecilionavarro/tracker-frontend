@@ -33,6 +33,15 @@ export type OverviewResponse = {
   };
 };
 
+export type DashboardActivityResponse = {
+  days: number;
+  points: {
+    date: string;
+    time_worked: number;
+    session_count: number;
+  }[];
+};
+
 export type Session = {
   id: string;
   category_id: string;
@@ -55,9 +64,24 @@ export const getOverview = async (): Promise<OverviewResponse> => {
   return response.data;
 };
 
+export const getDashboardActivity = async (
+  days: number
+): Promise<DashboardActivityResponse> => {
+  const response = await API.get("/api/v1/dashboard/activity", {
+    params: { days },
+  });
+
+  return response.data;
+};
+
 export const getSessions = async (): Promise<Session[]> => {
   const response = await API.get('/api/v1/sessions', {
     params: { page: 1, page_size: 10 }
   })
   return response.data.items
 }
+
+export const deleteSession = async (sessionId: string) => {
+  const response = await API.delete(`/api/v1/sessions/${sessionId}`);
+  return response.data;
+};

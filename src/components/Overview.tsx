@@ -1,6 +1,7 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import {
   Label,
+  PolarAngleAxis,
   PolarGrid,
   PolarRadiusAxis,
   RadialBar,
@@ -81,13 +82,12 @@ function GoalCard({
   goalSeconds: number;
 }) {
   const goalMet = workedSeconds >= goalSeconds;
-  const progress = Math.min(workedSeconds / goalSeconds, 1);
-  const endAngle = progress * 360;
+  const cappedWorkedSeconds = Math.min(workedSeconds, goalSeconds);
 
   const chartData = [
     {
       workDay: "goal",
-      seconds: workedSeconds,
+      seconds: cappedWorkedSeconds,
       fill: goalMet ? "#22c55e" : "var(--color-workDay)",
     },
   ];
@@ -106,10 +106,16 @@ function GoalCard({
           <RadialBarChart
             data={chartData}
             startAngle={0}
-            endAngle={endAngle}
-            outerRadius={90}
+            endAngle={360}
+            outerRadius={120}
             innerRadius={80}
           >
+            <PolarAngleAxis
+              type="number"
+              domain={[0, goalSeconds]}
+              tick={false}
+            />
+
             <PolarGrid
               gridType="circle"
               radialLines={false}
@@ -311,7 +317,7 @@ const Overview = () => {
   }).length;
 
   return (
-    <div className="grid grid-cols-4 gap-4 py-4">
+    <div className="grid grid-cols-4 gap-4 pb-4">
       <MetricCard
         title="Status"
         value={isClockedIn ? "Clocked In" : "Clocked Out"}

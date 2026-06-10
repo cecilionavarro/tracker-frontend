@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { SESSIONS } from "@/queryOptions/sessionsQueryOptions";
 import { OVERVIEW } from "@/queryOptions/overviewQueryOptions";
+import { DASHBOARD_ACTIVITY } from "@/queryOptions/dashboardActivityQueryOptions";
 import { API_BASE_URL } from "@/config/apiClient";
 import type { Session } from "@/lib/api";
 import { getActiveDurationSeconds } from "@/lib/time";
@@ -24,31 +25,36 @@ export function useDashboardWebSocket() {
 
     socket.onmessage = (event) => {
       let payload: DashboardSocketPayload | null = null;
+
       try {
         payload = JSON.parse(event.data);
       } catch {
         payload = null;
       }
 
-      // If backend only tells us clocked_in state, update the active row locally
       if (
         payload?.type === "state_update" ||
         payload?.type === "status_update"
       ) {
         const clockedIn = payload?.data?.clocked_in;
+
         if (clockedIn === false) {
           const nowIso = new Date().toISOString();
+
           queryClient.setQueryData<Session[]>([SESSIONS], (old) => {
             if (!old) return old;
-            return old.map((s) => {
-              if (!s.is_active) return s;
+
+            return old.map((session) => {
+              if (!session.is_active) return session;
+
               const elapsed = getActiveDurationSeconds(
-                s.start_time,
-                s.end_time,
+                session.start_time,
+                session.end_time,
                 Date.now()
               );
+
               return {
-                ...s,
+                ...session,
                 is_active: false,
                 end_time: nowIso,
                 elapsed_time: elapsed,
@@ -58,9 +64,9 @@ export function useDashboardWebSocket() {
         }
       }
 
-      // Always refetch to stay in sync with backend
       queryClient.refetchQueries({ queryKey: [SESSIONS] });
       queryClient.refetchQueries({ queryKey: [OVERVIEW] });
+      queryClient.refetchQueries({ queryKey: [DASHBOARD_ACTIVITY] });
     };
 
     return () => {
