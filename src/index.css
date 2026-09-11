@@ -128,3 +128,73 @@
     @apply font-sans;
     }
 }
+
+/* The LED stays 8px; only its fixed-size glow changes intensity. */
+.active-session-dot {
+  position: relative;
+}
+
+.active-session-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 6px 2px rgb(34 197 94 / 70%);
+  pointer-events: none;
+  opacity: 0.4;
+  animation: active-session-glow 2s ease-in-out infinite;
+}
+
+@keyframes active-session-glow {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .active-session-dot::after { animation: none; }
+}
+
+
+/* Dashboard type and spacing tokens: fixed sizes at every viewport width. */
+:root {
+  --tracker-text-size: 0.75rem;
+  --tracker-value-size: 1rem;
+  --tracker-panel-space: 1rem;
+  --tracker-label-gap: 0.25rem;
+}
+
+.tracker-label,
+.tracker-body,
+.tracker-detail {
+  font-family: var(--font-sans);
+  font-size: var(--tracker-text-size);
+  line-height: 1.5;
+}
+.tracker-label {
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.tracker-body {
+  font-weight: 400;
+  color: var(--foreground);
+}
+.tracker-detail {
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+.tracker-value {
+  font-family: var(--font-sans);
+  font-size: var(--tracker-value-size);
+  font-weight: 600;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+.tracker-panel {
+  --card-spacing: var(--tracker-panel-space);
+}
+.tracker-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tracker-label-gap);
+}

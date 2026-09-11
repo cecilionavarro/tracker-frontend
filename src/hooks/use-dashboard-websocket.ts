@@ -4,7 +4,7 @@ import { SESSIONS } from "@/queryOptions/sessionsQueryOptions";
 import { OVERVIEW } from "@/queryOptions/overviewQueryOptions";
 import { DASHBOARD_ACTIVITY } from "@/queryOptions/dashboardActivityQueryOptions";
 import { API_BASE_URL } from "@/config/apiClient";
-import type { Session } from "@/lib/api";
+import type { SessionPage } from "@/lib/api";
 import { getActiveDurationSeconds } from "@/lib/time";
 
 const WS_PATH = "/api/v1/ws/dashboard/";
@@ -41,10 +41,10 @@ export function useDashboardWebSocket() {
         if (clockedIn === false) {
           const nowIso = new Date().toISOString();
 
-          queryClient.setQueryData<Session[]>([SESSIONS], (old) => {
+          queryClient.setQueriesData<SessionPage>({ queryKey: [SESSIONS] }, (old) => {
             if (!old) return old;
 
-            return old.map((session) => {
+            return { ...old, items: old.items.map((session) => {
               if (!session.is_active) return session;
 
               const elapsed = getActiveDurationSeconds(
@@ -59,12 +59,12 @@ export function useDashboardWebSocket() {
                 end_time: nowIso,
                 elapsed_time: elapsed,
               };
-            });
+            }) };
           });
         }
       }
 
-      queryClient.refetchQueries({ queryKey: [SESSIONS] });
+      queryClient.invalidateQueries({ queryKey: [SESSIONS] });
       queryClient.refetchQueries({ queryKey: [OVERVIEW] });
       queryClient.refetchQueries({ queryKey: [DASHBOARD_ACTIVITY] });
     };

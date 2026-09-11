@@ -2,7 +2,6 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import {
   Label,
   PolarAngleAxis,
-  PolarGrid,
   PolarRadiusAxis,
   RadialBar,
   RadialBarChart,
@@ -93,64 +92,47 @@ function GoalCard({
   ];
 
   return (
-    <Card>
+    <Card className="tracker-panel min-w-0 gap-1">
       <CardHeader>
-        <CardTitle className="text-gray-400">Goal</CardTitle>
+        <CardTitle className="tracker-label">Goal</CardTitle>
       </CardHeader>
 
       <CardContent>
         <ChartContainer
           config={chartConfig}
-          className="mx-auto h-[180px] w-[180px]"
+          className="mx-auto aspect-square w-full max-w-[200px]"
         >
           <RadialBarChart
             data={chartData}
-            startAngle={0}
-            endAngle={360}
-            outerRadius={120}
-            innerRadius={80}
+            startAngle={90}
+            endAngle={-270}
+            outerRadius="100%"
+            innerRadius="80%"
+            barCategoryGap={0}
+            barGap={0}
+            margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
           >
-            <PolarAngleAxis
-              type="number"
-              domain={[0, goalSeconds]}
-              tick={false}
-            />
-
-            <PolarGrid
-              gridType="circle"
-              radialLines={false}
-              stroke="none"
-              className="first:fill-muted last:fill-background"
-              polarRadius={[90, 80]}
-            />
-
-            <RadialBar dataKey="seconds" background cornerRadius={10} />
-
+            <PolarAngleAxis type="number" domain={[0, goalSeconds]} tick={false} />
+            <RadialBar dataKey="seconds" background={{ fill: "var(--muted)" }} cornerRadius={4} />
             <PolarRadiusAxis tick={false} tickLine={false} axisLine={false}>
-              <Label
-                content={({ viewBox }) => {
-                  if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                    return (
-                      <text
-                        x={viewBox.cx}
-                        y={viewBox.cy}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                      >
-                        <tspan
-                          x={viewBox.cx}
-                          y={viewBox.cy}
-                          className="fill-foreground text-lg font-bold"
-                        >
-                          {formatDurationSeconds(workedSeconds)}
-                        </tspan>
-                      </text>
-                    );
-                  }
-
-                  return null;
-                }}
-              />
+              <Label content={({ viewBox }) => {
+                if (!viewBox || !("cx" in viewBox) || !("cy" in viewBox)) return null;
+                const cx = Number(viewBox.cx);
+                const cy = Number(viewBox.cy);
+                const duration = formatDurationSeconds(workedSeconds);
+                return (
+                  <foreignObject x={cx * 0.24} y={0} width={cx * 1.52} height={cy * 2}>
+                    <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
+                      <p className="tracker-value flex flex-wrap justify-center gap-x-1" aria-label={duration}>
+                        {duration.split(" ").map((value, index) => (
+                          <span key={index} aria-hidden="true" className="whitespace-nowrap">{value}</span>
+                        ))}
+                      </p>
+                      <p className="tracker-detail">Time worked</p>
+                    </div>
+                  </foreignObject>
+                );
+              }} />
             </PolarRadiusAxis>
           </RadialBarChart>
         </ChartContainer>
@@ -173,19 +155,19 @@ function MetricCard({
   active?: boolean;
 }) {
   return (
-    <Card>
+    <Card className="tracker-panel min-w-0">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-gray-400">
-          {active && <span className="h-2 w-2 rounded-full bg-green-500" />}
+        <CardTitle className="flex items-center gap-2 tracker-label">
+          {active && <span className="active-session-dot h-2 w-2 shrink-0 rounded-full bg-green-500" />}
           {title}
         </CardTitle>
 
-        <p className="text-4xl">{value}</p>
+        <p className="tracker-value">{value}</p>
 
         {subTitle && (
-          <div className="pt-4">
-            <p className="text-gray-400">{subTitle}</p>
-            <p className="text-4xl">{subValue}</p>
+          <div className="tracker-label-group pt-2">
+            <CardTitle className="tracker-label">{subTitle}</CardTitle>
+            <p className="tracker-value">{subValue}</p>
           </div>
         )}
       </CardHeader>
@@ -208,19 +190,19 @@ function WeekGoalCard({
   }[];
 }) {
   return (
-    <Card>
+    <Card className="tracker-panel min-w-0">
       <CardHeader>
-        <CardTitle className="text-gray-400">
+        <CardTitle className="tracker-label">
           Goal completed past week
         </CardTitle>
 
-        <p className="text-4xl">
+        <p className="tracker-value">
           {days} {days === 1 ? "day" : "days"}
         </p>
       </CardHeader>
 
       <CardContent>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2 xl:gap-3">
           {graph.map((day, index) => {
             const percent = !day.is_future && goalSeconds > 0
               ? Math.max(0, Math.min(day.seconds / goalSeconds, 1)) * 100
@@ -229,11 +211,11 @@ function WeekGoalCard({
             return (
               <div
                 key={`${day.day}-${index}`}
-                className="flex flex-col items-center gap-1"
+                className="flex min-w-0 flex-col items-center gap-1"
               >
-                <span className="text-xs text-gray-400">{day.day}</span>
+                <span className="tracker-detail">{day.day}</span>
 
-                <div className="relative h-20 w-8 overflow-hidden rounded-md bg-neutral-800">
+                <div className="relative aspect-[1/2] w-full overflow-hidden rounded-md bg-neutral-800">
                   <div
                     className={
                       day.goal_met
@@ -320,7 +302,7 @@ const Overview = () => {
   }).length;
 
   return (
-    <div className="grid grid-cols-4 gap-4 pb-4">
+    <div className="grid grid-cols-2 gap-3 pb-4 md:grid-cols-4 lg:gap-4">
       <MetricCard
         title="Status"
         value={isClockedIn ? "Clocked In" : "Clocked Out"}

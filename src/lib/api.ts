@@ -70,21 +70,32 @@ export const getOverview = async (): Promise<OverviewResponse> => {
 };
 
 export const getDashboardActivity = async (
-  days: number
+  days: number,
+  signal?: AbortSignal
 ): Promise<DashboardActivityResponse> => {
   const response = await API.get("/api/v1/dashboard/activity", {
     params: { days },
+    signal,
   });
 
   return response.data;
 };
 
-export const getSessions = async (): Promise<Session[]> => {
-  const response = await API.get('/api/v1/sessions', {
-    params: { page: 1, page_size: 10 }
-  })
-  return response.data.items
-}
+export type SessionPage = {
+  items: Session[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+};
+
+export const getSessions = async (page = 1, pageSize = 10, signal?: AbortSignal): Promise<SessionPage> => {
+  const response = await API.get<SessionPage>('/api/v1/sessions', {
+    params: { page, page_size: pageSize },
+    signal,
+  });
+  return response.data;
+};
 
 export const deleteSession = async (sessionId: string) => {
   const response = await API.delete(`/api/v1/sessions/${sessionId}`);

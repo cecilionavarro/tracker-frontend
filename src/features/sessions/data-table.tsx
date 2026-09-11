@@ -32,14 +32,14 @@ export function DataTable<TData, TValue>({
   })
  
   return (
-    <div className="overflow-hidden border rounded-sm">
-      <Table>
+    <div className="min-w-0 max-w-full overflow-hidden rounded-md border [&_[data-slot=table-container]]:overscroll-x-none">
+      <Table className="tracker-body w-max min-w-full">
         <TableHeader className="bg-muted">
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
                 return (
-                  <TableHead key={header.id}>
+                  <TableHead key={header.id} className="tracker-label px-3 first:pl-4 last:pr-4">
                     {header.isPlaceholder
                       ? null
                       : flexRender(
@@ -52,7 +52,7 @@ export function DataTable<TData, TValue>({
             </TableRow>
           ))}
         </TableHeader>
-        <TableBody className="**:data-[slot=table-cell]:first:w-10 **:data-[slot=table-cell]:last:w-10">
+        <TableBody>
           {table.getRowModel().rows?.length ? (
             table.getRowModel().rows.map((row) => (
               <TableRow
@@ -60,7 +60,7 @@ export function DataTable<TData, TValue>({
                 data-state={row.getIsSelected() && "selected"}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
+                  <TableCell key={cell.id} className="px-3 first:pl-4 last:pr-4">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 ))}
