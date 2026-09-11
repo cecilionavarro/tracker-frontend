@@ -222,7 +222,9 @@ function WeekGoalCard({
       <CardContent>
         <div className="flex gap-2">
           {graph.map((day, index) => {
-            const percent = Math.min(day.seconds / goalSeconds, 1) * 100;
+            const percent = !day.is_future && goalSeconds > 0
+              ? Math.max(0, Math.min(day.seconds / goalSeconds, 1)) * 100
+              : 0;
 
             return (
               <div
@@ -231,15 +233,16 @@ function WeekGoalCard({
               >
                 <span className="text-xs text-gray-400">{day.day}</span>
 
-                <div className="flex h-20 w-8 items-end rounded-md bg-neutral-800">
+                <div className="relative h-20 w-8 overflow-hidden rounded-md bg-neutral-800">
                   <div
                     className={
                       day.goal_met
-                        ? "w-full rounded-md bg-green-500"
-                        : "w-full rounded-md bg-blue-600"
+                        ? "absolute inset-x-0 bottom-0 w-full rounded-md bg-green-500"
+                        : "absolute inset-x-0 bottom-0 w-full rounded-md bg-blue-600"
                     }
                     style={{
-                      height: `${day.is_future ? 8 : percent}%`,
+                      height: `${percent}%`,
+                      minHeight: percent > 0 ? "4px" : 0,
                     }}
                   />
                 </div>

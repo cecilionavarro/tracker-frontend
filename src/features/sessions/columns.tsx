@@ -16,38 +16,7 @@ import { SESSIONS } from "@/queryOptions/sessionsQueryOptions";
 import { OVERVIEW } from "@/queryOptions/overviewQueryOptions";
 import { DASHBOARD_ACTIVITY } from "@/queryOptions/dashboardActivityQueryOptions";
 
-const CATEGORY_DOT_COLORS: Record<string, string> = {
-  creating: "#eab308",
-  toycon: "#22c55e",
-};
-
-function getCategoryDotColor(session: Session) {
-  const category = session.category;
-  if (!category) return "#999999";
-
-  const categoryLabel = category.label.trim().toLowerCase();
-  const tags = session.tags.trim().toLowerCase();
-
-  if (categoryLabel === "pianiso") {
-    if (
-      tags.includes("non_technical") ||
-      tags.includes("non technical") ||
-      tags.includes("non-technical")
-    ) {
-      return "#f97316";
-    }
-
-    if (tags.includes("technical")) {
-      return "#ef4444";
-    }
-  }
-
-  return (
-    CATEGORY_DOT_COLORS[categoryLabel] ??
-    category.color ??
-    "#999999"
-  );
-}
+import { getCategoryColor } from "@/lib/category-presentation";
 
 function DurationCell({
   row,
@@ -171,7 +140,7 @@ export const columns: ColumnDef<Session>[] = [
         <span className="inline-flex items-center gap-2">
           <span
             className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: getCategoryDotColor(row.original) }}
+            style={{ backgroundColor: getCategoryColor(category, row.original.tags) }}
           />
           <span>{category.label}</span>
         </span>

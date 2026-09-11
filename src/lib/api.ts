@@ -39,6 +39,11 @@ export type DashboardActivityResponse = {
     date: string;
     time_worked: number;
     session_count: number;
+    categories?: { id: string; label: string; color: string | null; seconds: number; tags?: string; is_active?: boolean }[];
+    pianiso_technical?: number;
+    pianiso_non_technical?: number;
+    creating?: number;
+    toycon?: number;
   }[];
 };
 
