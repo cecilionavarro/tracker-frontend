@@ -3,9 +3,13 @@ import type { DashboardActivityResponse } from "@/lib/api";
 import { getCategoryColor, getComponentLabel } from "@/lib/category-presentation";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Rectangle, XAxis, YAxis, type RectangleProps } from "recharts";
+import type { TooltipProps } from "recharts/types/component/Tooltip";
+import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 import { dashboardActivityQueryOptions } from "@/queryOptions/dashboardActivityQueryOptions";
 import { overviewQueryOptions } from "@/queryOptions/overviewQueryOptions";
+import { sessionsQueryOptions } from "@/queryOptions/sessionsQueryOptions";
+import { normalizeActivityData, advanceActivityPoint } from "@/lib/activity-live";
 import { useNow } from "@/hooks/useNow";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { formatDurationSeconds } from "@/lib/format";
@@ -52,8 +56,8 @@ function getSections(point: DashboardActivityResponse["points"][number]) {
     { id: "toycon", label: "Toycon", tags: "", seconds: point.toycon ?? 0 },
   ];
   return (point.categories?.length ? point.categories : legacySections).filter(
-    (category: { seconds: number }) => category.seconds > 0
-  ) as { id: string; label: string; color?: string | null; seconds: number; tags?: string }[];
+    (category: { seconds: number; is_active?: boolean }) => category.seconds > 0 || category.is_active
+  ) as { id: string; label: string; color?: string | null; seconds: number; tags?: string; is_active?: boolean }[];
 }
 
 function formatMetricValue(chart: ActiveChart, value: number) {
@@ -75,20 +79,22 @@ function parseDateOnly(value: string) {
 }
 
 function formatDate(value: string) {
-  return parseDateOnly(value).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  return axisDateFormatter.format(parseDateOnly(value));
 }
 
 function formatTooltipDate(value: string) {
-  return parseDateOnly(value).toLocaleDateString("en-US", {
+  return tooltipDateFormatter.format(parseDateOnly(value));
+}
+
+const axisDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short", day: "numeric",
+});
+const tooltipDateFormatter = new Intl.DateTimeFormat("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
     year: "numeric",
-  });
-}
+});
 
 function formatLocalDateKey(value: number) {
   const date = new Date(value);
@@ -131,18 +137,140 @@ function getBarCornerRadius({ width = 0, height = 0 }: RectangleProps, maxRadius
   return Math.min(maxRadius, Math.abs(width) * 0.15, Math.abs(height) / 2);
 }
 
+function LiveActivityTotal({ data, dataUpdatedAt, activeStartTime, isPlaceholderData }: {
+  data: DashboardActivityResponse;
+  dataUpdatedAt: number;
+  activeStartTime: string | undefined;
+  isPlaceholderData: boolean;
+}) {
+  const now = useNow(Boolean(activeStartTime));
+  const todayKey = formatLocalDateKey(now);
+  const delta = isPlaceholderData ? 0 : getLiveDeltaSeconds({ activeStartTime, dataUpdatedAt, now });
+  const total = data.points.reduce((sum, point) => sum + point.time_worked + (
+    getActivityDateKey(point.date) === todayKey && point.categories?.some(category => category.is_active)
+      ? delta : 0
+  ), 0);
+  return <>{formatDurationSeconds(total)}</>;
+}
+
+type ActivityTooltipProps = Omit<TooltipProps<ValueType, NameType>, "content"> & {
+  activeChart: ActiveChart;
+  activeStartTime: string | undefined;
+  dataUpdatedAt: number;
+  data: DashboardActivityResponse;
+  isPlaceholderData: boolean;
+};
+
+function LiveActivityTooltip({
+  activeChart,
+  activeStartTime,
+  dataUpdatedAt,
+  data,
+  isPlaceholderData,
+  ...props
+}: ActivityTooltipProps) {
+  // Only the open tooltip subscribes to the one-second clock. The bars keep
+  // their cheaper ten-second geometry refresh.
+  const now = useNow(Boolean(props.active && activeStartTime));
+  const payload = props.payload?.slice(0, 1).map((item) => {
+    // Recharts can retain a hover payload until the pointer moves. Read the
+    // matching raw API point each tick, so refreshes cannot double-count time.
+    const point = data.points.find(point => point.date === item.payload?.date);
+    if (!point) return item;
+    const delta = isPlaceholderData || activeChart !== "time_worked" ? 0
+      : getLiveDeltaSeconds({ activeStartTime, dataUpdatedAt, now });
+    const livePoint = advanceActivityPoint(point, delta);
+    return { ...item, payload: livePoint, value: livePoint[activeChart] };
+  });
+
+  return (
+    <ChartTooltipContent
+      {...props}
+      payload={payload}
+      className="tracker-body w-[260px] max-w-[calc(100vw-48px)]"
+      nameKey={activeChart}
+      labelFormatter={(value) => formatTooltipDate(String(value))}
+      formatter={(_value, _name, item, index) => {
+        if (index !== 0) return null;
+        const point = item.payload;
+        const sections = getSections(point);
+        const remainder = Math.max(0, Number(point.time_worked) -
+          sections.reduce((sum, section) => sum + section.seconds, 0));
+
+        return (
+          <div className="grid w-full gap-2">
+            {activeChart === "time_worked" && sections.map((section) => (
+              <div key={section.id} className="flex items-center justify-between gap-4">
+                <span className="tracker-detail flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: getCategoryColor(section, section.tags) }} />
+                  {getComponentLabel(section, section.tags)}
+                </span>
+                <span className="shrink-0 whitespace-nowrap tracker-body tabular-nums">{formatDurationSeconds(section.seconds)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between gap-4 font-medium">
+              <span>{chartConfig[activeChart].label}</span>
+              <span className="shrink-0 whitespace-nowrap tracker-body tabular-nums">{formatMetricValue(activeChart, Number(point[activeChart]))}</span>
+            </div>
+            {activeChart === "time_worked" && remainder > 0 && (
+              <span className="tracker-detail max-w-[280px]">
+                Category details are missing from the API response. Restart the backend to load the full breakdown.
+              </span>
+            )}
+          </div>
+        );
+      }}
+    />
+  );
+}
+
 export function DashboardActivityChart() {
   const isMobile = useIsMobile();
   const maxCornerRadius = isMobile ? 1 : 4;
-  const now = useNow(1000);
   const [activeChart, setActiveChart] =
     React.useState<ActiveChart>("time_worked");
   const [rangeDays, setRangeDays] = React.useState<ActivityRange>(30);
 
-  const { data, dataUpdatedAt, isFetching, isError, isPlaceholderData, refetch } = useQuery(
+  const { data: response, dataUpdatedAt, isFetching, isError, isPlaceholderData, refetch } = useQuery(
     dashboardActivityQueryOptions(rangeDays)
   );
   const { data: overview } = useQuery(overviewQueryOptions());
+  const { data: recentSessions } = useQuery({
+    ...sessionsQueryOptions(),
+    enabled: overview?.day.status === "clocked_in"
+      && Boolean(response && !response.points.at(-1)?.categories?.length),
+  });
+  const activeSession = recentSessions?.items.find(session =>
+    session.id === overview?.day.active_session?.id && session.is_active && !session.end_time);
+  const data = React.useMemo(() => response
+    ? normalizeActivityData(response, activeSession) : undefined, [response, activeSession]);
+  // Bar geometry needs less frequent updates than the live text. API events
+  // still render immediately, including clock-in/out and range changes.
+  const now = useNow(overview?.day.status === "clocked_in" && activeChart === "time_worked", 10_000);
+
+  // Category definitions and historical segments change only on an API update.
+  const { components, activityChartConfig, basePoints } = React.useMemo(() => {
+    const points = data?.points ?? [];
+    const components = Array.from(new Map(
+      points.flatMap(point => getSections(point).map(section => [section.id, section] as const))
+    ).values()).sort((a, b) => getComponentLabel(a, a.tags).localeCompare(getComponentLabel(b, b.tags)));
+    const activityChartConfig: ChartConfig = {
+      ...chartConfig,
+      ...Object.fromEntries(components.map((component, index) => [
+        `activity_${index}`,
+        { label: getComponentLabel(component, component.tags), color: getCategoryColor(component, component.tags) },
+      ])),
+    };
+    const basePoints = points.map(point => {
+      const sections = new Map(getSections(point).map(section => [section.id, section.seconds]));
+      const segments = components.map(component => sections.get(component.id) ?? 0);
+      return {
+        ...point, segments,
+        ...Object.fromEntries(segments.map((seconds, index) => [`activity_${index}`, seconds])),
+      };
+    });
+    return { components, activityChartConfig, basePoints };
+  }, [data]);
 
   const rangeControls = (
     <div
@@ -202,11 +330,18 @@ export function DashboardActivityChart() {
   });
 
   const todayKey = formatLocalDateKey(now);
-  const livePoints = data.points.map((point) => {
+  const livePoints = basePoints.map((point) => {
     if (getActivityDateKey(point.date) !== todayKey) return point;
+
+    const segments = point.segments.map((seconds, index) => seconds + (
+      point.categories?.some(category => category.id === components[index].id && category.is_active)
+        ? liveDeltaSeconds : 0
+    ));
 
     return {
       ...point,
+      segments,
+      ...Object.fromEntries(segments.map((seconds, index) => [`activity_${index}`, seconds])),
       time_worked: point.time_worked + (point.categories?.some(category => category.is_active) ? liveDeltaSeconds : 0),
       categories: point.categories?.map(category => ({
         ...category,
@@ -214,31 +349,6 @@ export function DashboardActivityChart() {
       })),
     };
   });
-
-  const components = Array.from(new Map(
-    livePoints.flatMap(point => getSections(point).map(section => [section.id, section] as const))
-  ).values()).sort((a, b) => getComponentLabel(a, a.tags).localeCompare(getComponentLabel(b, b.tags)));
-  const activityChartConfig: ChartConfig = {
-    ...chartConfig,
-    ...Object.fromEntries(components.map((component, index) => [
-      `activity_${index}`,
-      { label: getComponentLabel(component, component.tags), color: getCategoryColor(component, component.tags) },
-    ])),
-  };
-  const chartPoints = livePoints.map(point => {
-    const sections = getSections(point);
-    return {
-      ...point,
-      segments: components.map(component => sections
-        .filter(section => section.id === component.id)
-        .reduce((sum, section) => sum + section.seconds, 0)),
-    };
-  });
-
-  const plottedPoints = chartPoints.map(point => ({
-    ...point,
-    ...Object.fromEntries(point.segments.map((seconds, index) => [`activity_${index}`, seconds])),
-  }));
 
   const total = {
     time_worked: livePoints.reduce((sum, point) => sum + point.time_worked, 0),
@@ -268,7 +378,7 @@ export function DashboardActivityChart() {
   return (
     <Card className="tracker-panel min-w-0 py-0">
       <CardHeader className="flex flex-col items-stretch border-b p-0! lg:flex-row">
-        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 p-4">
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 p-3 sm:p-4">
           <CardTitle>Time Worked</CardTitle>
           <CardDescription>
             Showing activity for the last {data.days} days
@@ -282,21 +392,28 @@ export function DashboardActivityChart() {
               key={key}
               type="button"
               data-active={activeChart === key}
-              className="relative z-30 flex min-w-0 flex-col justify-center gap-1 border-t p-4 text-left even:border-l data-[active=true]:bg-muted/50 lg:border-t-0 lg:border-l"
+              className="relative z-30 flex min-w-0 flex-col justify-center gap-1 border-t p-3 text-left even:border-l data-[active=true]:bg-muted/50 sm:p-4 lg:border-t-0 lg:border-l"
               onClick={() => setActiveChart(key)}
             >
               <span className="tracker-label">
                 {chartConfig[key].label}
               </span>
               <span className="tracker-value">
-                {formatMetricValue(key, total[key])}
+                {key === "time_worked" ? (
+                  <LiveActivityTotal
+                    data={data}
+                    dataUpdatedAt={dataUpdatedAt}
+                    activeStartTime={overview?.day.active_session?.start_time}
+                    isPlaceholderData={isPlaceholderData}
+                  />
+                ) : formatMetricValue(key, total[key])}
               </span>
             </button>
           ))}
         </div>
       </CardHeader>
 
-      <CardContent className="min-w-0 px-4 pb-4">
+      <CardContent className="min-w-0 px-3 pb-3 sm:px-4 sm:pb-4">
         {requestStatus}
         <ChartContainer
           aria-busy={isPlaceholderData}
@@ -305,7 +422,7 @@ export function DashboardActivityChart() {
         >
           <BarChart
             accessibilityLayer
-            data={plottedPoints}
+            data={livePoints}
             margin={{
               left: 0,
               right: 0,
@@ -314,7 +431,7 @@ export function DashboardActivityChart() {
             <CartesianGrid vertical={false} />
 
             <YAxis
-              width={activeChart === "time_worked" ? 40 : 64}
+              width={40}
               domain={[0, axisTicks[axisTicks.length - 1]]}
               tickLine={false}
               axisLine={false}
@@ -323,19 +440,19 @@ export function DashboardActivityChart() {
               interval="preserveStart"
               minTickGap={12}
               allowDecimals={false}
-              tickFormatter={(value: number) =>
-                `${Math.round(value / axisUnit).toLocaleString("en-US")}${activeChart === "time_worked" ? timeUnit.suffix : ""}`
-              }
-              label={activeChart === "time_worked" ? undefined : {
-                value: "Sessions",
-                angle: -90,
-                position: "insideLeft",
-                style: {
-                  textAnchor: "middle",
-                  fill: "var(--muted-foreground)",
-                  fontSize: "var(--tracker-text-size)",
-                },
-              }}
+              tick={({ y, payload }) => (
+                <text
+                  x={0}
+                  y={y}
+                  dy="0.355em"
+                  textAnchor="start"
+                  fill="var(--muted-foreground)"
+                  fontSize="var(--tracker-text-size)"
+                >
+                  {Math.round(Number(payload.value) / axisUnit).toLocaleString("en-US")}
+                  {activeChart === "time_worked" ? timeUnit.suffix : ""}
+                </text>
+              )}
             />
 
             <XAxis
@@ -349,48 +466,13 @@ export function DashboardActivityChart() {
 
             <ChartTooltip
               content={(props) => (
-                <ChartTooltipContent
-                  active={props.active}
-                  label={props.label}
-                  payload={props.payload?.slice(0, 1)}
-                  className="tracker-body w-[260px] max-w-[calc(100vw-48px)]"
-                  nameKey={activeChart}
-                  labelFormatter={(value) => formatTooltipDate(String(value))}
-                  formatter={(_value, _name, item, index) => {
-                    if (index !== 0) return null;
-                    const point = item.payload;
-                    const sections = getSections(point);
-                    const remainder = Math.max(0, Number(point.time_worked) -
-                      sections.reduce((sum, section) => sum + section.seconds, 0));
-
-                    return (
-                      <div className="grid w-full gap-2">
-                        {activeChart === "time_worked" && (
-                          <>
-                            {sections.map((section) => (
-                              <div key={section.id} className="flex items-center justify-between gap-4">
-                                <span className="tracker-detail flex items-center gap-2">
-                                  <span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: getCategoryColor(section, section.tags) }} />
-                                  {getComponentLabel(section, section.tags)}
-                                </span>
-                                <span className="shrink-0 whitespace-nowrap tracker-body tabular-nums">{formatDurationSeconds(section.seconds)}</span>
-                              </div>
-                            ))}
-
-                          </>
-                        )}
-                        <div className="flex justify-between gap-4 font-medium">
-                          <span>{chartConfig[activeChart].label}</span>
-                          <span className="shrink-0 whitespace-nowrap tracker-body tabular-nums">{formatMetricValue(activeChart, Number(point[activeChart]))}</span>
-                        </div>
-                        {activeChart === "time_worked" && remainder > 0 && (
-                          <span className="tracker-detail max-w-[280px]">
-                            Category details are missing from the API response. Restart the backend to load the full breakdown.
-                          </span>
-                        )}
-                      </div>
-                    );
-                  }}
+                <LiveActivityTooltip
+                  {...props}
+                  activeChart={activeChart}
+                  activeStartTime={overview?.day.active_session?.start_time}
+                  dataUpdatedAt={dataUpdatedAt}
+                  data={data}
+                  isPlaceholderData={isPlaceholderData}
                 />
               )}
             />
@@ -423,6 +505,7 @@ export function DashboardActivityChart() {
               <Bar
                 dataKey="session_count"
                 fill="var(--color-session_count)"
+                isAnimationActive={false}
                 shape={(props: unknown) => {
                   const bar = props as RectangleProps;
                   return <Rectangle {...bar} radius={getBarCornerRadius(bar, maxCornerRadius)} />;

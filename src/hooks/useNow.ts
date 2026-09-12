@@ -1,13 +1,16 @@
-// src/hooks/useNow.ts
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
+import { createDashboardClock } from "@/lib/dashboard-clock";
 
-export function useNow(intervalMs = 1000) {
-  const [now, setNow] = useState(() => Date.now());
+const clock = createDashboardClock();
+const noSubscribe = () => () => {};
 
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(id);
-  }, [intervalMs]);
-
-  return now;
+export function useNow(enabled = true, intervalMs = 1) {
+  // A stable snapshot lets slower consumers skip React renders between updates,
+  // while every consumer continues to share the same underlying timer.
+  const getSnapshot = useCallback(() => clock.getSnapshot(intervalMs), [intervalMs]);
+  return useSyncExternalStore(
+    enabled ? clock.subscribe : noSubscribe,
+    getSnapshot,
+    getSnapshot,
+  );
 }

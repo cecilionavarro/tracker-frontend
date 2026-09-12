@@ -6,6 +6,6 @@ export const OVERVIEW = "overview";
 export function overviewQueryOptions() {
   return queryOptions({
     queryKey: [OVERVIEW],
-    queryFn: getOverview,
+    queryFn: ({ signal }) => getOverview(signal),
   });
 }

@@ -87,8 +87,77 @@ Each should return `{"status":"healthy"}`. In browser developer tools, confirm
 A blocked-host response means `DEV_ALLOWED_HOSTS` needs the exact public hostname.
 A proxy connection error means the backend is stopped or `API_PROXY_TARGET` is unreachable.
 
+The dashboard reconnects dropped WebSockets with a 1–30 second retry delay and
+refreshes when the page becomes visible again. A heartbeat checks for connections
+that stopped carrying messages. While connecting or disconnected, visible pages
+also refresh their data every 5 seconds; healthy WebSockets use push updates.
+The backend must include the matching `ping`/`pong` handler. Restart the backend
+after updating it, then reload the browser page.
+
+If refreshing loads correct data but button presses do not update the page, inspect
+the **dashboard** WebSocket in the Network panel (the Vite hot-reload socket is
+separate). Check for a successful connection and `status_update`, `state_update`,
+and heartbeat replies. A single cancelled handshake during development does not
+prove all connections failed; inspect the surviving connection.
+
+Run connection recovery checks with `npm run test:socket`.
+
+## Long-running dashboard performance
+
+Live counters share one one-second clock. Completed session rows do not subscribe,
+and the clock stops when the page is hidden or no live counters are mounted. On
+return, it catches up from timestamps. The goal ring uses a lightweight SVG circle
+instead of recalculating Recharts axes and layout each second. Duration text stays
+live every second, including the open activity tooltip; activity bars update every
+10 seconds between API updates. The tooltip reads the latest raw API point rather
+than Recharts' cached hover payload. Older activity responses get their active
+category from the current session, using the shared sessions query. Clock-in/out
+and range changes still update the
+chart immediately. Historical chart segments and date formatters are reused.
+Connection and focus refreshes are grouped, with no overlapping refresh
+batches and one follow-up if a real state change arrives during a request.
+
+Run `npm run test:performance` for timer cleanup, hidden-tab recovery, and request
+coalescing checks. These are deterministic regression checks, not a measurement
+of Safari's memory usage. If a resource warning returns, capture Safari Web
+Inspector's Timelines recording while idle and after switching tabs to identify
+CPU activity or memory growth. Serving Vite development mode also includes hot
+reload and React development checks; production hosting should serve the built
+assets with the same `/api` HTTP and WebSocket proxy.
+
 This routing is for the Vite development server. `npm run build` creates static
 files; a production host must also proxy `/api` with WebSocket support to the backend.
 
+## Checking Lighthouse results
+
+Audit a built version in a browser profile with extensions disabled. Development
+mode serves raw source modules, React development checks, and Vite hot reload;
+extension scripts also appear in Lighthouse's JavaScript treemap. Their sizes
+should not be attributed to the application's production bundle.
+
+For a local build check, keep the backend running and run:
+
+```bash
+npm run build
+npm run preview -- --host 0.0.0.0 --port 4173 --strictPort
+```
+
+Open `http://<FRONTEND_LAN_IP>:4173` from your computer, verify that the dashboard
+loads and receives live updates, then run Lighthouse there. Preview inherits the
+existing `/api` HTTP and WebSocket proxy. This leaves the development server and
+public tunnel on port 5173 unchanged. Local results exclude Cloudflare/network
+latency, so also audit the public hostname after production hosting is configured.
+
+Preview is for testing, not permanent production hosting. The production server
+must serve `dist`, fall back to `index.html` for app routes, serve `robots.txt`
+as plain text, and proxy `/api` (including WebSockets) to port 4004 before applying
+the app fallback. Cache hashed `/assets/` files long-term and revalidate HTML.
+Confirm that the public page no longer loads `/@vite/client` or `/src/main.tsx`.
+
+A startup Lighthouse score does not establish a memory leak. For that, compare
+memory after repeated navigation, tab hiding/restoring, and socket reconnects,
+allowing garbage collection between measurements.
+
 References: [Vite server options](https://vite.dev/config/server-options),
+[Vite build and preview](https://vite.dev/guide/static-deploy.html),
 [Cloudflare Tunnel setup](https://developers.cloudflare.com/tunnel/setup/).

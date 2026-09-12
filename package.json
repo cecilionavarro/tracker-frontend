@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:socket": "node tests/dashboard-socket.test.mjs",
+    "test:performance": "node tests/dashboard-performance.test.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

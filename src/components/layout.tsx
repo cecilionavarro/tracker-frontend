@@ -1,8 +1,8 @@
 
 export function Layout({ children }: {children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-background">
+    <main className="min-h-screen bg-background">
       {children}
-    </div>
+    </main>
   )
 }

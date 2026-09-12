@@ -34,9 +34,9 @@ export default function SessionsTable() {
 
   return (
     <section aria-label="Sessions" aria-busy={isFetching} className="min-w-0 space-y-4">
-      <p className="tracker-detail px-4 sm:hidden">Swipe the table to see all columns.</p>
+      <p className="tracker-detail px-3 sm:hidden">Swipe the table to see all columns.</p>
       <DataTable columns={columns} data={data.items} />
-      <div className="flex flex-wrap items-center justify-between tracker-body gap-4 px-4 pb-4">
+      <div className="flex flex-wrap items-center justify-between tracker-body gap-4 px-3 pb-4 sm:px-4">
         <span role="status" className="tracker-detail">
           {isPlaceholderData ? "Loading sessions…" : `${first}–${last} of ${data.total.toLocaleString()} sessions`}
         </span>

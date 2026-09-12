@@ -24,13 +24,6 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: [
         {
-          find: /^use-sync-external-store\/shim\/with-selector(\.js)?$/,
-          replacement: path.resolve(
-            __dirname,
-            "./src/lib/use-sync-external-store-with-selector.ts"
-          ),
-        },
-        {
           find: /^es-toolkit\/compat\/(.+)$/,
           replacement: path.resolve(__dirname, "./src/lib/es-toolkit-compat/$1.ts"),
         },

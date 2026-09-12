@@ -64,8 +64,8 @@ export type Session = {
   notes: string;
 }
 
-export const getOverview = async (): Promise<OverviewResponse> => {
-  const response = await API.get("/api/v1/overview");
+export const getOverview = async (signal?: AbortSignal): Promise<OverviewResponse> => {
+  const response = await API.get("/api/v1/overview", { signal });
   return response.data;
 };
 

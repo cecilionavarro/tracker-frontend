@@ -33,13 +33,21 @@ export function DataTable<TData, TValue>({
  
   return (
     <div className="min-w-0 max-w-full overflow-hidden rounded-md border [&_[data-slot=table-container]]:overscroll-x-none">
-      <Table className="tracker-body w-max min-w-full">
+      <Table className="tracker-body min-w-[720px] table-fixed sm:min-w-[900px]">
+        <colgroup>
+          {table.getVisibleLeafColumns().map((column) => (
+            <col
+              key={column.id}
+              className={column.id === "actions" ? "w-[60px] sm:w-16" : undefined}
+            />
+          ))}
+        </colgroup>
         <TableHeader className="bg-muted">
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
                 return (
-                  <TableHead key={header.id} className="tracker-label px-3 first:pl-4 last:pr-4">
+                  <TableHead key={header.id} className="tracker-label px-3 sm:px-4">
                     {header.isPlaceholder
                       ? null
                       : flexRender(
@@ -60,7 +68,7 @@ export function DataTable<TData, TValue>({
                 data-state={row.getIsSelected() && "selected"}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className="px-3 first:pl-4 last:pr-4">
+                  <TableCell key={cell.id} className="px-3 sm:px-4">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 ))}

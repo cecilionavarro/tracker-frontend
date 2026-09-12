@@ -6,6 +6,8 @@ import { DASHBOARD_ACTIVITY } from "@/queryOptions/dashboardActivityQueryOptions
 import { API_BASE_URL } from "@/config/apiClient";
 import type { SessionPage } from "@/lib/api";
 import { getActiveDurationSeconds } from "@/lib/time";
+import { connectDashboardSocket } from "@/lib/dashboard-socket";
+import { createDashboardRefresher } from "@/lib/dashboard-refresh";
 
 const WS_PATH = "/api/v1/ws/dashboard/";
 
@@ -21,16 +23,23 @@ export function useDashboardWebSocket() {
 
   useEffect(() => {
     const wsUrl = API_BASE_URL.replace(/^http/, "ws") + WS_PATH;
-    const socket = new WebSocket(wsUrl);
+    const refresher = createDashboardRefresher(() => Promise.all(
+      [SESSIONS, OVERVIEW, DASHBOARD_ACTIVITY].map(key =>
+        queryClient.invalidateQueries({ queryKey: [key] }, { cancelRefetch: false })
+      )
+    ));
 
-    socket.onmessage = (event) => {
+    const disconnect = connectDashboardSocket(wsUrl, (event) => {
       let payload: DashboardSocketPayload | null = null;
 
       try {
         payload = JSON.parse(event.data);
       } catch {
-        payload = null;
+        return;
       }
+
+      // Heartbeats confirm connectivity without refetching dashboard data.
+      if (payload?.type !== "state_update" && payload?.type !== "status_update") return;
 
       if (
         payload?.type === "state_update" ||
@@ -64,13 +73,12 @@ export function useDashboardWebSocket() {
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: [SESSIONS] });
-      queryClient.refetchQueries({ queryKey: [OVERVIEW] });
-      queryClient.refetchQueries({ queryKey: [DASHBOARD_ACTIVITY] });
-    };
+      refresher.request(payload.type === "state_update");
+    }, refresher.request);
 
     return () => {
-      socket.close();
+      disconnect();
+      refresher.stop();
     };
   }, [queryClient]);
 }

@@ -1,36 +1,21 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
-import {
-  Label,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  RadialBar,
-  RadialBarChart,
-} from "recharts";
-
+import { useQuery } from "@tanstack/react-query";
+import { memo, useMemo } from "react";
+import { getWeekDateLabels } from "@/lib/dashboard-date";
 import { overviewQueryOptions } from "@/queryOptions/overviewQueryOptions";
 import { useNow } from "@/hooks/useNow";
 import { formatDurationSeconds } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ChartContainer, type ChartConfig } from "./ui/chart";
+import { Button } from "./ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
-const chartConfig = {
-  seconds: {
-    label: "Seconds",
-  },
-  workDay: {
-    label: "Work Day",
-    color: "var(--chart-2)",
-  },
-} satisfies ChartConfig;
+const timeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric", minute: "2-digit", hour12: true,
+});
 
 function formatTime(iso: string | null) {
   if (!iso) return "-";
 
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(new Date(iso));
+  return timeFormatter.format(new Date(iso));
 }
 
 function getActiveSeconds(startTime: string | null | undefined, now: number) {
@@ -80,68 +65,53 @@ function GoalCard({
   workedSeconds: number;
   goalSeconds: number;
 }) {
-  const goalMet = workedSeconds >= goalSeconds;
-  const cappedWorkedSeconds = Math.min(workedSeconds, goalSeconds);
-
-  const chartData = [
-    {
-      workDay: "goal",
-      seconds: cappedWorkedSeconds,
-      fill: goalMet ? "#22c55e" : "var(--color-workDay)",
-    },
-  ];
+  const goalMet = goalSeconds > 0 && workedSeconds >= goalSeconds;
+  const progress = goalSeconds > 0 ? Math.max(0, Math.min(workedSeconds / goalSeconds, 1)) : 0;
+  const duration = formatDurationSeconds(workedSeconds);
+  const circumference = 2 * Math.PI * 90;
 
   return (
     <Card className="tracker-panel min-w-0 gap-1">
       <CardHeader>
         <CardTitle className="tracker-label">Goal</CardTitle>
       </CardHeader>
-
       <CardContent>
-        <ChartContainer
-          config={chartConfig}
-          className="mx-auto aspect-square w-full max-w-[200px]"
-        >
-          <RadialBarChart
-            data={chartData}
-            startAngle={90}
-            endAngle={-270}
-            outerRadius="100%"
-            innerRadius="80%"
-            barCategoryGap={0}
-            barGap={0}
-            margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+        {/* A circle only needs its stroke length updated, not a chart layout
+            and axis calculation on every one-second clock tick. */}
+        <div className="relative mx-auto aspect-square w-full max-w-[200px]">
+          <svg
+            viewBox="0 0 200 200"
+            className="block h-full w-full"
+            role="img"
+            aria-label={`Daily work goal: ${duration} worked toward a ${formatDurationSeconds(goalSeconds)} goal`}
           >
-            <PolarAngleAxis type="number" domain={[0, goalSeconds]} tick={false} />
-            <RadialBar dataKey="seconds" background={{ fill: "var(--muted)" }} cornerRadius={4} />
-            <PolarRadiusAxis tick={false} tickLine={false} axisLine={false}>
-              <Label content={({ viewBox }) => {
-                if (!viewBox || !("cx" in viewBox) || !("cy" in viewBox)) return null;
-                const cx = Number(viewBox.cx);
-                const cy = Number(viewBox.cy);
-                const duration = formatDurationSeconds(workedSeconds);
-                return (
-                  <foreignObject x={cx * 0.24} y={0} width={cx * 1.52} height={cy * 2}>
-                    <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
-                      <p className="tracker-value flex flex-wrap justify-center gap-x-1" aria-label={duration}>
-                        {duration.split(" ").map((value, index) => (
-                          <span key={index} aria-hidden="true" className="whitespace-nowrap">{value}</span>
-                        ))}
-                      </p>
-                      <p className="tracker-detail">Time worked</p>
-                    </div>
-                  </foreignObject>
-                );
-              }} />
-            </PolarRadiusAxis>
-          </RadialBarChart>
-        </ChartContainer>
+            <circle cx="100" cy="100" r="90" fill="none" stroke="var(--muted)" strokeWidth="20" />
+            {progress > 0 && (
+              <circle
+                cx="100" cy="100" r="90" fill="none"
+                stroke={goalMet ? "#22c55e" : "var(--chart-2)"}
+                strokeWidth="20" strokeLinecap="round"
+                strokeDasharray={`${circumference * progress} ${circumference}`}
+                transform="rotate(-90 100 100)"
+              />
+            )}
+          </svg>
+          <div className="absolute inset-0 mx-auto flex w-[76%] flex-col items-center justify-center gap-1 text-center">
+            <p className="tracker-value flex flex-wrap justify-center gap-x-1">
+              <span className="sr-only">{duration}</span>
+              {duration.split(" ").map((value, index) => (
+                <span key={index} aria-hidden="true" className="whitespace-nowrap">{value}</span>
+              ))}
+            </p>
+            <p className="tracker-detail">Time worked</p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-function MetricCard({
+const MetricCard = memo(function MetricCard({
   title,
   value,
   subTitle,
@@ -173,14 +143,16 @@ function MetricCard({
       </CardHeader>
     </Card>
   );
-}
+});
 
 function WeekGoalCard({
   days,
   graph,
   goalSeconds,
+  snapshotAt,
 }: {
   days: number;
+  snapshotAt: number;
   goalSeconds: number;
   graph: {
     day: string;
@@ -189,6 +161,7 @@ function WeekGoalCard({
     is_future: boolean;
   }[];
 }) {
+  const dateLabels = useMemo(() => getWeekDateLabels(snapshotAt), [snapshotAt]);
   return (
     <Card className="tracker-panel min-w-0">
       <CardHeader>
@@ -207,28 +180,55 @@ function WeekGoalCard({
             const percent = !day.is_future && goalSeconds > 0
               ? Math.max(0, Math.min(day.seconds / goalSeconds, 1)) * 100
               : 0;
+            const dayName = dateLabels[index] ?? day.day;
+            const status = day.is_future
+              ? "Future day"
+              : day.goal_met
+                ? "Goal completed"
+                : "Goal not completed";
 
             return (
-              <div
-                key={`${day.day}-${index}`}
-                className="flex min-w-0 flex-col items-center gap-1"
-              >
-                <span className="tracker-detail">{day.day}</span>
-
-                <div className="relative aspect-[1/2] w-full overflow-hidden rounded-md bg-neutral-800">
+              <Tooltip key={`${day.day}-${index}`}>
+                <TooltipTrigger asChild>
                   <div
-                    className={
-                      day.goal_met
-                        ? "absolute inset-x-0 bottom-0 w-full rounded-md bg-green-500"
-                        : "absolute inset-x-0 bottom-0 w-full rounded-md bg-blue-600"
-                    }
-                    style={{
-                      height: `${percent}%`,
-                      minHeight: percent > 0 ? "4px" : 0,
-                    }}
-                  />
-                </div>
-              </div>
+                    role="img"
+                    tabIndex={0}
+                    aria-label={`${dayName}: ${formatDurationSeconds(day.seconds)} worked. ${status}.`}
+                    className="flex min-w-0 cursor-default flex-col items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className="tracker-detail">{day.day}</span>
+
+                    <div className="relative aspect-[1/2] w-full overflow-hidden rounded-md bg-neutral-800">
+                      <div
+                        className={
+                          day.goal_met
+                            ? "absolute inset-x-0 bottom-0 w-full rounded-md bg-green-500"
+                            : "absolute inset-x-0 bottom-0 w-full rounded-md bg-blue-600"
+                        }
+                        style={{
+                          height: `${percent}%`,
+                          minHeight: percent > 0 ? "4px" : 0,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent
+                  showArrow={false}
+                  side="top"
+                  sideOffset={8}
+                  className="tracker-body grid min-w-40 items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-foreground shadow-xl"
+                >
+                  <span className="font-medium">{dayName}</span>
+                  <div className="flex w-full items-center justify-between gap-4 font-medium">
+                    <span>Time worked</span>
+                    <span className="shrink-0 whitespace-nowrap tabular-nums">
+                      {formatDurationSeconds(day.seconds)}
+                    </span>
+                  </div>
+                  <span className="text-muted-foreground">{status}</span>
+                </TooltipContent>
+              </Tooltip>
             );
           })}
         </div>
@@ -238,10 +238,28 @@ function WeekGoalCard({
 }
 
 const Overview = () => {
-  const now = useNow(1000);
-  const { data, dataUpdatedAt } = useSuspenseQuery(overviewQueryOptions());
+  const { data, dataUpdatedAt, isError, isFetching, refetch } = useQuery(overviewQueryOptions());
 
-  const isClockedIn = data.day.status === "clocked_in";
+  const isClockedIn = data?.day.status === "clocked_in";
+  const now = useNow(isClockedIn);
+  if (!data) {
+    return (
+      <section aria-label="Overview" className="pb-4">
+        <div role={isError ? "alert" : "status"} className="tracker-detail flex items-center gap-2 pb-3">
+          {isError ? "Couldn’t load the overview." : "Loading overview…"}
+          {isError && <Button variant="outline" disabled={isFetching} onClick={() => void refetch()}>Retry</Button>}
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:gap-4" aria-hidden="true">
+          {["Status", "Longest session", "First session", "Goal", "Time Working", "Longest session", "Week daily avg", "Goal completed past week"].map((title, index) => (
+            <Card key={index} className="tracker-panel min-h-40 min-w-0">
+              <CardHeader><CardTitle className="tracker-label">{title}</CardTitle></CardHeader>
+              <CardContent><div className="h-5 w-2/3 rounded bg-muted" /></CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+    );
+  }
   const activeStartTime = data.day.active_session?.start_time;
 
   const activeSeconds = getActiveSeconds(activeStartTime, now);
@@ -277,13 +295,9 @@ const Overview = () => {
     liveWeekWorkedSeconds / daysElapsed
   );
 
-  const todayLabel = new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-  }).format(new Date(now))[0];
-
-  const todayIndex = data.week.graph.findIndex((day) => {
-    return !day.is_future && day.day === todayLabel;
-  });
+  const todayIndex = data.week.graph.reduce(
+    (latest, day, index) => day.is_future ? latest : index, -1
+  );
 
   const liveWeekGraph = data.week.graph.map((day, index) => {
     if (index !== todayIndex) return day;
@@ -344,6 +358,7 @@ const Overview = () => {
       />
 
       <WeekGoalCard
+        snapshotAt={dataUpdatedAt}
         days={liveGoalCompletedDays}
         graph={liveWeekGraph}
         goalSeconds={data.day.goal_seconds}

@@ -1,8 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import {
-  IconDotsVertical,
-} from "@tabler/icons-react"
-import { useMemo } from "react";
+import { EllipsisVertical } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { deleteSession, type Session } from "../../lib/api";
@@ -20,18 +17,15 @@ import { getCategoryColor } from "@/lib/category-presentation";
 
 function DurationCell({
   row,
-  latestStartTime,
 }: {
   row: Session;
-  latestStartTime: string | null;
 }) {
-  const isLatest = latestStartTime && row.start_time === latestStartTime;
-  const now = useNow(1000);
-
-  const totalSeconds = useMemo(() => {
-    if (!isLatest) return row.elapsed_time;
-    return getActiveDurationSeconds(row.start_time, row.end_time, now);
-  }, [isLatest, row.start_time, row.end_time, row.elapsed_time, now]);
+  const isActive = row.is_active && !row.end_time;
+  const now = useNow(isActive);
+  const totalSeconds = isActive
+    ? getActiveDurationSeconds(row.start_time, row.end_time, now)
+    : row.elapsed_time ?? (row.end_time
+      ? getActiveDurationSeconds(row.start_time, row.end_time, now) : null);
 
   return (
     <span className="inline-flex items-center gap-2 tabular-nums">
@@ -68,32 +62,34 @@ function SessionActionsCell({ session }: { session: Session }) {
   });
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          className="flex size-11 text-muted-foreground data-[state=open]:bg-muted sm:size-8"
-          size="icon"
-          disabled={deleteMutation.isPending}
-        >
-          <IconDotsVertical />
-          <span className="sr-only">Open menu</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="tracker-body w-32">
-        <DropdownMenuItem>Edit</DropdownMenuItem>
-        <DropdownMenuItem>Make a copy</DropdownMenuItem>
-        <DropdownMenuItem>Favorite</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          variant="destructive"
-          disabled={deleteMutation.isPending}
-          onSelect={() => deleteMutation.mutate()}
-        >
-          {deleteMutation.isPending ? "Deleting..." : "Delete"}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="flex w-full justify-end">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            className="flex size-11 text-muted-foreground data-[state=open]:bg-muted sm:size-8"
+            size="icon"
+            disabled={deleteMutation.isPending}
+          >
+            <EllipsisVertical />
+            <span className="sr-only">Open menu</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="tracker-body w-32">
+          <DropdownMenuItem>Edit</DropdownMenuItem>
+          <DropdownMenuItem>Make a copy</DropdownMenuItem>
+          <DropdownMenuItem>Favorite</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={deleteMutation.isPending}
+            onSelect={() => deleteMutation.mutate()}
+          >
+            {deleteMutation.isPending ? "Deleting..." : "Delete"}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 
@@ -102,20 +98,7 @@ export const columns: ColumnDef<Session>[] = [
   {
     accessorKey: "elapsed_time",
     header: "Duration",
-    cell: ({ row, table }) => {
-      const latestStartTime = table
-        .getRowModel()
-        .rows.reduce<string | null>((latest, r) => {
-          const start = r.original.start_time;
-          if (!start) return latest;
-          if (!latest) return start;
-          return Date.parse(start) > Date.parse(latest) ? start : latest;
-        }, null);
-
-      return (
-        <DurationCell row={row.original} latestStartTime={latestStartTime} />
-      );
-    },
+    cell: ({ row }) => <DurationCell row={row.original} />,
   },
   {
     accessorKey: "start_time",
@@ -155,6 +138,7 @@ export const columns: ColumnDef<Session>[] = [
   },
   {
     id: "actions",
+    header: () => <span className="sr-only">Actions</span>,
     cell: ({ row }) => <SessionActionsCell session={row.original} />,
   },
 ];
